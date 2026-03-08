@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My fovourite speedruning game</title>
+    <style>
+        body { margin: 0; background: #000; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; overflow: hidden; font-family: 'Courier New', monospace; }
+        #ui { color: white; margin-bottom: 10px; text-align: center; font-size: 1.1rem; width: 600px; }
+        canvas { border: 5px solid #ff0000; background: #0000ff; }
+        .stat { font-weight: bold; color: yellow; }
+        .exp-stat { color: #00ffff; }
+        .reset-hint { font-size: 0.8rem; color: #888; margin-top: 5px; }
+        
+        #shop { 
+            display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: rgba(0, 0, 50, 0.95); border: 3px solid gold; padding: 20px; color: white;
+            text-align: center; z-index: 10; width: 350px;
+        }
+        .shop-item { margin: 15px 0; padding: 10px; border: 1px solid #444; cursor: pointer; transition: 0.2s; }
+        .shop-item:hover { background: #111; border-color: gold; transform: scale(1.05); }
+        .cost { color: #00ffff; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div id="ui">
+        LVL: <span id="lvl" class="stat">1</span> | 
+        KEY: <span id="hasKey" class="stat" style="color: red;">LOCKED</span> |
+        EXP: <span id="exp" class="stat exp-stat">0</span>
+        <div class="reset-hint">[R] Reset | [C] Shop | [I] Use Key Hack</div>
+    </div>
+    
+    <div id="shop">
+        <h2 style="color: gold; margin-top: 0;">SPEEDRUN SHOP</h2>
+        <div class="shop-item" onclick="buyPower('del')">Delete Obstacles<br><span class="cost">50 EXP</span></div>
+        <div class="shop-item" onclick="buyPower('key')">Unlock [I] Key Hack<br><span class="cost">100 EXP</span></div>
+        <div class="shop-item" onclick="buyPower('ai')">AI Autopilot<br><span class="cost">100 EXP</span></div>
+        <button onclick="toggleShop()" style="padding: 10px 20px; cursor: pointer; background: #333; color: white; border: 1px solid gold;">Resume Game [C]</button>
+    </div>
+
+    <canvas id="game" width="600" height="400"></canvas>
+
+    <script>
+        const canvas = document.getElementById("game");
+        const ctx = canvas.getContext("2d");
+
+        let currentLevel = 1;
+        let totalExp = 0;
+        let hasKey = false;
+        let shopOpen = false;
+        let powers = { del: false, key: false, ai: false };
+        let aiActive = false;
+
+        const player = { x: 30, y: 180, size: 20, speed: 5 };
+        const key = { x: 0, y: 0, size: 15, active: true };
+        const door = { x: 550, y: 160, w: 30, h: 80 };
+        let obstacles = [];
+
+        const keys = {};
+        window.addEventListener("keydown", (e) => {
+            keys[e.code] = true;
+            if (e.code === "KeyR") { currentLevel = 1; initLevel(); }
+            if (e.code === "KeyC") toggleShop();
+            if (e.code === "KeyI" && powers.key) { collectKey(); }
+        });
+        window.addEventListener("keyup", (e) => keys[e.code] = false);
+
+        function toggleShop() {
+            shopOpen = !shopOpen;
+            document.getElementById("shop").style.display = shopOpen ? "block" : "none";
+        }
+
+        function buyPower(type) {
+            let costs = { del: 50, key: 100, ai: 100 };
+            if (totalExp >= costs[type]) {
+                totalExp -= costs[type];
+                powers[type] = true;
+                if (type === 'del') obstacles = []; 
+                if (type === 'ai') aiActive = true;
+                updateUI();
+            } else {
+                alert("Insufficient EXP!");
+            }
+        }
+
+        function collectKey() {
+            key.active = false;
+            hasKey = true;
+            updateUI();
+        }
+
+        function updateUI() {
+            document.getElementById("lvl").innerText = currentLevel;
+            document.getElementById("exp").innerText = totalExp;
+            document.getElementById("hasKey").innerText = hasKey ? "READY" : "LOCKED";
+            document.getElementById("hasKey").style.color = hasKey ? "lime" : "red";
+        }
+
+        function checkCollision(r1, r2) {
+            const r1w = r1.w || r1.size;
+            const r1h = r1.h || r1.size;
+            const r2w = r2.w || r2.size;
+            const r2h = r2.h || r2.size;
+            return r1.x < r2.x + r2w && r1.x + r1w > r2.x && r1.y < r2.y + r2h && r1.y + r1h > r2.y;
+        }
+
+        function initLevel() {
+            hasKey = false;
+            key.active = true;
+            player.x = 30;
+            player.y = 180;
+            obstacles = [];
+            if (!powers.del) {
+                for (let i = 0; i < currentLevel * 3; i++) {
+                    let obs = { x: 80 + Math.random() * 400, y: Math.random() * 320, w: 25, h: 25 + Math.random() * 60 };
+                    obstacles.push(obs);
+                }
+            }
+            let keyOverlap = true;
+            while(keyOverlap) {
+                key.x = 100 + Math.random() * 400;
+                key.y = 50 + Math.random() * 300;
+                keyOverlap = obstacles.some(obs => checkCollision(key, obs));
+            }
+            updateUI();
+        }
+
+        function update() {
+            if (shopOpen) return;
+            let target = hasKey ? door : key;
+            
+            if (aiActive) {
+                if (player.x < target.x) player.x += player.speed;
+                if (player.x > target.x) player.x -= player.speed;
+                if (player.y < target.y) player.y += player.speed;
+                if (player.y > target.y) player.y -= player.speed;
+            } else {
+                let nextX = player.x, nextY = player.y;
+                if (keys["KeyW"]) nextY -= player.speed;
+                if (keys["KeyS"]) nextY += player.speed;
+                if (keys["KeyA"]) nextX -= player.speed;
+                if (keys["KeyD"]) nextX += player.speed;
+
+                const nextPos = { x: nextX, y: nextY, size: player.size };
+                if (!obstacles.some(obs => checkCollision(nextPos, obs))) {
+                    player.x = Math.max(0, Math.min(canvas.width - player.size, nextX));
+                    player.y = Math.max(0, Math.min(canvas.height - player.size, nextY));
+                }
+            }
+
+            if (key.active && checkCollision(player, key)) collectKey();
+            if (hasKey && checkCollision(player, door)) {
+                if (currentLevel < 10) { 
+                    currentLevel++; 
+                    initLevel(); 
+                } else { 
+                    totalExp += 10;
+                    currentLevel = 1;
+                    initLevel(); 
+                }
+            }
+        }
+
+        function draw() {
+            ctx.fillStyle = "#0000ff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = "#ff0000"; obstacles.forEach(obs => ctx.fillRect(obs.x, obs.y, obs.w, obs.h));
+            if (key.active) {
+                ctx.fillStyle = "gold"; ctx.beginPath();
+                ctx.arc(key.x + key.size/2, key.y + key.size/2, key.size/2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.fillStyle = hasKey ? "yellow" : "#444"; ctx.fillRect(door.x, door.y, door.w, door.h);
+            ctx.fillStyle = aiActive ? "#00ffff" : "white"; ctx.fillRect(player.x, player.y, player.size, player.size);
+            update();
+            requestAnimationFrame(draw);
+        }
+
+        initLevel();
+        draw();
+    </script>
+</body>
+</html>
