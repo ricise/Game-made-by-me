@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>10 Levels - Press R to Reset</title>
+    <style>
+        body { margin: 0; background: #000; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; overflow: hidden; font-family: 'Courier New', monospace; }
+        #ui { color: white; margin-bottom: 10px; text-align: center; font-size: 1.1rem; }
+        canvas { border: 5px solid #ff0000; background: #0000ff; }
+        .stat { font-weight: bold; color: yellow; }
+        .reset-hint { font-size: 0.8rem; color: #888; margin-top: 5px; }
+    </style>
+</head>
+<body>
+    <div id="ui">
+        LEVEL: <span id="lvl" class="stat">1</span> | 
+        KEY: <span id="hasKey" class="stat" style="color: red;">LOCKED</span>
+        <div class="reset-hint">Press [R] to Reset to Level 1</div>
+    </div>
+    <canvas id="game" width="600" height="400"></canvas>
+
+    <script>
+        const canvas = document.getElementById("game");
+        const ctx = canvas.getContext("2d");
+
+        let currentLevel = 1;
+        let hasKey = false;
+        const player = { x: 30, y: 180, size: 20, speed: 5 };
+        const key = { x: 0, y: 0, size: 15, active: true };
+        const door = { x: 550, y: 160, w: 30, h: 80 };
+        let obstacles = [];
+
+        const keys = {};
+        window.addEventListener("keydown", (e) => {
+            keys[e.code] = true;
+            // --- RESET LOGIC ---
+            if (e.code === "KeyR") {
+                currentLevel = 1;
+                initLevel();
+            }
+        });
+        window.addEventListener("keyup", (e) => keys[e.code] = false);
+
+        function checkCollision(r1, r2) {
+            const r1w = r1.w || r1.size;
+            const r1h = r1.h || r1.size;
+            const r2w = r2.w || r2.size;
+            const r2h = r2.h || r2.size;
+            return r1.x < r2.x + r2w && r1.x + r1w > r2.x && r1.y < r2.y + r2h && r1.y + r1h > r2.y;
+        }
+
+        function initLevel() {
+            hasKey = false;
+            key.active = true;
+            player.x = 30;
+            player.y = 180;
+            obstacles = [];
+
+            // 1. Generate Obstacles (avoiding start and end zones)
+            for (let i = 0; i < currentLevel * 3; i++) {
+                let obs;
+                let overlap = true;
+                while(overlap) {
+                    obs = {
+                        x: 80 + Math.random() * 400,
+                        y: Math.random() * 320,
+                        w: 25,
+                        h: 25 + Math.random() * 60
+                    };
+                    overlap = checkCollision(obs, door) || checkCollision(obs, {x:10, y:150, size:80});
+                }
+                obstacles.push(obs);
+            }
+
+            // 2. Generate Key (Must NOT be inside an obstacle)
+            let keyOverlap = true;
+            while(keyOverlap) {
+                key.x = 100 + Math.random() * 400;
+                key.y = 50 + Math.random() * 300;
+                keyOverlap = obstacles.some(obs => checkCollision(key, obs)) || checkCollision(key, door);
+            }
+
+            document.getElementById("lvl").innerText = currentLevel;
+            document.getElementById("hasKey").innerText = "LOCKED";
+            document.getElementById("hasKey").style.color = "red";
+        }
+
+        function update() {
+            let nextX = player.x;
+            let nextY = player.y;
+
+            if (keys["KeyW"]) nextY -= player.speed;
+            if (keys["KeyS"]) nextY += player.speed;
+            if (keys["KeyA"]) nextX -= player.speed;
+            if (keys["KeyD"]) nextX += player.speed;
+
+            const nextPos = { x: nextX, y: nextY, size: player.size };
+            let hitWall = obstacles.some(obs => checkCollision(nextPos, obs));
+
+            if (!hitWall) {
+                player.x = Math.max(0, Math.min(canvas.width - player.size, nextX));
+                player.y = Math.max(0, Math.min(canvas.height - player.size, nextY));
+            }
+
+            if (key.active && checkCollision(player, key)) {
+                key.active = false;
+                hasKey = true;
+                document.getElementById("hasKey").innerText = "READY";
+                document.getElementById("hasKey").style.color = "lime";
+            }
+
+            if (hasKey && checkCollision(player, door)) {
+                if (currentLevel < 10) { 
+                    currentLevel++; 
+                    initLevel(); 
+                } else { 
+                    alert("CHAMPION! Press R to play again."); 
+                }
+            }
+        }
+
+        function draw() {
+            ctx.fillStyle = "#0000ff"; // Blue floor
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = "#ff0000"; // Red walls
+            obstacles.forEach(obs => ctx.fillRect(obs.x, obs.y, obs.w, obs.h));
+
+            if (key.active) {
+                ctx.fillStyle = "gold";
+                ctx.beginPath();
+                ctx.arc(key.x + key.size/2, key.y + key.size/2, key.size/2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            ctx.fillStyle = hasKey ? "yellow" : "#444";
+            ctx.fillRect(door.x, door.y, door.w, door.h);
+
+            ctx.fillStyle = "white"; // Player
+            ctx.fillRect(player.x, player.y, player.size, player.size);
+
+            update();
+            requestAnimationFrame(draw);
+        }
+
+        initLevel();
+        draw();
+    </script>
+</body>
+</html>
